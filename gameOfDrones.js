@@ -91,7 +91,7 @@ var commander = {
     },
     clearZone: function(index){
         this.zones[index].drones = [];
-    },
+    },   
     assignDrones: function(){
         for (let i = 0; i < this.numberOfZones; i++) {
             var zone =  this.zones[i];
@@ -106,14 +106,7 @@ var commander = {
                 for(let i=0;i<zone.drones.length;i++){
                     this.releaseDrone(zone.drones[i]);
                 }
-                this.clearZone(i);
-                if(this.numberOfDrones > this.numberOfZones){
-                    var drone = this.getAvailableDrone(zone.x,zone.y)
-                    if(drone !== undefined){
-                        this.updateDroneTarget(drone.index,zone.x,zone.y);
-                        this.assignDrone(drone.index,i);
-                    }
-                }
+                this.clearZone(i); 
             }            
             if(zone.teamId != this.playerID){               
                 var drone = this.getAvailableDrone(zone.x,zone.y)
@@ -163,34 +156,4 @@ while (true) {
    
     commander.assignDrones();
     commander.makeMoves();
-}
-
-function initialize(zones,drones){
-    for (var i = 0; i < D; i++) {
-            var orderedZones = zones.map(function(currentValue, index){
-                var x = drones[i].dx-currentValue.x;
-                var y = drones[i].dy-currentValue.y;
-                var distance = Math.sqrt((x*x)+(y*y));
-                return {
-                    index: index,
-                    zone: currentValue,
-                    distance:distance
-                    };
-            });
-            orderedZones = orderedZones.sort(function(a, b) {
-              var distanceA = a.distance;
-              var distanceB = b.distance;
-              if (distanceA < distanceB) {
-                return -1;
-              }
-              if (distanceA > distanceB) {
-                return 1;
-              }
-              return 0;
-            });
-            drones[i].zone = orderedZones[0].zone;  
-            drones[i].zoneIndex = orderedZones[0].index;  
-            drones[i].zones = orderedZones.slice(0,zones.length);
-    }   
-    return drones;
 }
