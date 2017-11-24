@@ -31,20 +31,28 @@ function getVectorLength(x,y,xx,yy){
         var dy = y-yy;
         return Math.sqrt((dx*dx)+(dy*dy));
     }   
+    
+function checkCircleCollision(x1,y1,r1,x2,y2,r2){
+    let distanceBetween = getVectorLength(x1,y1,x2,y2);
+    let combinedRadius = r1+r2;    
+    if(distanceBetween<=combinedRadius){
+        return true;
+    }
+    return false;    
+}
 
-function getPlayer(isReaper) {
+function getPlayer() {
     var player = {};
     player.x = null;
     player.y= null;
     player.px = null;
-    player.py = null;
-    player.isReaper = isReaper;
+    player.py = null;  
     player.useSkill = false;
     player.getMove=function(){            
         if((player.x === null || player.y===null) && !player.useSkill){
             print('WAIT');
         } else if((player.x !== null || player.y!==null) && player.useSkill){
-            print("SKILL"+ " "+player.x + " " + player.y);           
+            print("SKILL"+ " "+player.x + " " + player.y + " "+ "SKILL");           
         }
         else {     
            print(player.x + " " + player.y+ " " + "300"); 
@@ -54,7 +62,7 @@ function getPlayer(isReaper) {
         player.x = null;
         player.y = null;
         player.useSkill = false;
-    }
+    };
     return player;
 }
 
@@ -72,12 +80,11 @@ var game = {
     destroyers: [],
     tankers:[],
     doofers:[],
+    tarPools:[],
+    oilPools:[],
     playerDestroyer:{},
     playerReaper:{},  
-    playerDoofer:{},
-    arenaPoints:[],
-    currentPoint:0,
-    maxPoints:0,
+    playerDoofer:{},  
     updateInput : function(){
         this.myScore = parseInt(readline());       
         this.enemyScore1 = parseInt(readline());
@@ -104,101 +111,159 @@ var game = {
             unit.vy = parseInt(inputs[8]);
             unit.extra = parseInt(inputs[9]);
             unit.extra2 = parseInt(inputs[10]);
-            this.updateWrecks(unit);
-            this.updateReapers(unit);
-            this.updateDestroyers(unit);
-            this.updateTankers(unit);
-            this.updateDoofers(unit);
+            this.units.push(unit);
+            this.updateUnits(unit);           
         }
     },
-    assignMoves:function(){      
+    assignReaper:function(){
         let playerReaper = this.reapers.find(reaper=>{return reaper.playerId ===0});
         this.playerReaper.px = playerReaper.x;
         this.playerReaper.py = playerReaper.y;
-            
-        let playerDestroyer = this.destroyers.find(destroyer=>{return destroyer.playerId ===0}); 
-        let playerDoofer = this.doofers.find(doofer=>{return doofer.playerId ===0}); 
         
-        let wrecks = this.wrecks.map(wreck=>{
+        let wrecks = sort(this.wrecks.map(wreck=>{
             return {
                 wreck:wreck,
                 distance:getVectorLength(playerReaper.x,playerReaper.y,wreck.x,wreck.y)
                 };
-            });
-        let orderedWrecks = sort(wrecks,"distance");       
-        if(orderedWrecks.length>0){          
-            this.playerReaper.x = orderedWrecks[0].wreck.x-playerReaper.vx;
-            this.playerReaper.y = orderedWrecks[0].wreck.y-playerReaper.vy;
+            }),"distance");          
+        if(wrecks.length>0){
+            let wreck = wrecks.find(wreck=>{
+                    let unit = this.units.filter(unit=>{
+                        return (
+                        unit.playerId !== 0 && (unit.unitType === 6));
+                        }).find(units=>{                          
+                           return  checkCircleCollision(
+                               wreck.wreck.x,wreck.wreck.y,wreck.wreck.radius,
+                               units.x,units.y,units.radius);
+                        });                       
+                    if(unit!==undefined){
+                        return false;
+                    }                    
+                    return true;
+                });           
+            if(wreck!==undefined){
+                this.playerReaper.x = wreck.wreck.x-playerReaper.vx;
+                this.playerReaper.y = wreck.wreck.y-playerReaper.vy;
+            }            
         }
         
-        //destroyer
-        let tankers = this.tankers.map(tanker=>{
+    },
+    assignDestroyer:function(){
+        let playerDestroyer = this.destroyers.find(destroyer=>{return destroyer.playerId ===0}); 
+        let playerReaper = this.reapers.find(reaper=>{return reaper.playerId ===0});
+        let tankers = sort(this.tankers.map(tanker=>{
             return {
                 tanker:tanker,
-                distance:getVectorLength(playerDestroyer.x,playerDestroyer.y,tanker.x,tanker.y)
+                water:tanker.extra
                 };
-        });
-        let orderedTankers = sort(tankers,"distance");
-        let reapers = this.reapers.map(reaper=>{
+        }),"water",false);        
+        let wrecks = sort(this.wrecks.map(wreck=>{
+            return {
+                wreck:wreck,
+                distance:getVectorLength(playerDestroyer.x,playerDestroyer.y,wreck.x,wreck.y)
+                };
+            }),"distance").filter(wreck =>{return wreck.distance<2000});
+       
+        if(this.myRage > 60 && wrecks.length>0){
+            let wreck = wrecks.find(wreck=>{
+                    if(checkCircleCollision(wreck.wreck.x,wreck.wreck.y,1000,
+                        playerReaper.x,playerReaper.y,playerReaper.radius)){
+                        return false;
+                    }
+                    let unit = this.units.filter(unit=>{
+                        return (unit.playerId !== 0 && (unit.unitType === 0));
+                        }).find(units=>{                          
+                           return  checkCircleCollision(
+                               wreck.wreck.x,wreck.wreck.y,1000,
+                               units.x,units.y,units.radius);
+                        });                       
+                    if(unit!==undefined){
+                        return true;
+                    }                    
+                    return false;
+                });           
+            if(wreck!==undefined){
+                this.playerDestroyer.x =  wreck.wreck.x;
+                this.playerDestroyer.y = wreck.wreck.y;
+                this.playerDestroyer.useSkill = true;
+                this.myRage-=60;
+            } else {
+                this.playerDestroyer.x = tankers[0].tanker.x-playerDestroyer.vx;
+                this.playerDestroyer.y = tankers[0].tanker.y-playerDestroyer.vy;
+            }
+        } else if(tankers.length>0){
+            this.playerDestroyer.x = tankers[0].tanker.x-playerDestroyer.vx;
+            this.playerDestroyer.y = tankers[0].tanker.y-playerDestroyer.vy;
+        }
+    },
+    assignDoofer: function(){
+        let playerDoofer = this.doofers.find(doofer=>{return doofer.playerId ===0});
+        let playerReaper = this.reapers.find(reaper=>{return reaper.playerId ===0});
+        let enemyReapers = sort(this.reapers.filter(reaper=>{return reaper.playerId !==0}).map(reaper=>{
             return {
                 reaper:reaper,
-                distance:getVectorLength(playerDestroyer.x,playerDestroyer.y,reaper.x,reaper.y)
+                distance:getVectorLength(playerDoofer.x,playerDoofer.y,reaper.x,reaper.y)
                 };
-        });
-        let orderedReapers = sort(reapers,"distance");
-        let enemyReaper = orderedReapers.find(reaper=>{return reaper.reaper.playerId !==0});      
-        if(this.myRage > 60 && enemyReaper && enemyReaper.distance <2000){           
-            this.playerDestroyer.x = enemyReaper.reaper.x-playerDestroyer.vx;
-            this.playerDestroyer.y = enemyReaper.reaper.y-playerDestroyer.vx; 
-            this.playerDestroyer.useSkill = true;           
-        } else if(orderedTankers.length>0){
-            this.playerDestroyer.x = orderedTankers[0].tanker.x;
-            this.playerDestroyer.y = orderedTankers[0].tanker.y;
-        }
-             
+        }),"distance");    
         
-        //doofer 
-        let distanceToPoint = getVectorLength(
-            playerDoofer.x,playerDoofer.y,this.arenaPoints[this.currentPoint].x,this.arenaPoints[this.currentPoint].y);
-        if(distanceToPoint < 1000){
-            this.currentPoint++;
-        }
-        
-         if(this.currentPoint == this.maxPoints){
-            this.currentPoint = 0;
-        }
-        
-        this.playerDoofer.x = this.arenaPoints[this.currentPoint].x;
-        this.playerDoofer.y = this.arenaPoints[this.currentPoint].y;
+        let wrecks = sort(this.wrecks.map(wreck=>{
+            return {
+                wreck:wreck,
+                distance:getVectorLength(playerDoofer.x,playerDoofer.y,wreck.x,wreck.y)
+                };
+            }),"distance").filter(wreck =>{return wreck.distance<2000});
+            
+         if(this.myRage > 30 && wrecks.length>0){
+            let wreck = wrecks.find(wreck=>{
+                    if(checkCircleCollision(wreck.wreck.x,wreck.wreck.y,1000,
+                        playerReaper.x,playerReaper.y,playerReaper.radius)){
+                        return false;
+                    }
+                    let unit = this.units.filter(unit=>{
+                        return (unit.playerId !== 0 && (unit.unitType === 0));
+                        }).find(units=>{                          
+                           return  checkCircleCollision(
+                               wreck.wreck.x,wreck.wreck.y,wreck.wreck.radius,
+                               units.x,units.y,units.radius);
+                        });                       
+                    if(unit!==undefined){
+                        return true;
+                    }                    
+                    return false;
+                });           
+            if(wreck!==undefined){
+                this.playerDoofer.x =  wreck.wreck.x;
+                this.playerDoofer.y = wreck.wreck.y;
+                this.playerDoofer.useSkill = true;
+                this.myRage-=30;
+            } else {
+                this.playerDoofer.x = enemyReapers[0].reaper.x-playerDoofer.vx;
+                this.playerDoofer.y = enemyReapers[0].reaper.y-playerDoofer.vy;
+            }
+        } else {
+            this.playerDoofer.x = enemyReapers[0].reaper.x-playerDoofer.vx;
+            this.playerDoofer.y = enemyReapers[0].reaper.y-playerDoofer.vy;
+        } 
+    },
+    assignMoves:function(){      
+       this.assignReaper();    
+       this.assignDestroyer(); 
+       this.assignDoofer();
     },
     makeMoves:function(){
         this.playerReaper.getMove();      
         this.playerDestroyer.getMove();         
         this.playerDoofer.getMove();    
     },
-    updateWrecks: function(unit){
-        if(unit.unitType ===4){
-            this.wrecks.push(unit);
-        }
-    },
-    updateDestroyers: function(unit){
-        if(unit.unitType ===1){
-            this.destroyers.push(unit);
-        }
-    },
-    updateTankers: function(unit){
-        if(unit.unitType ===3){
-            this.tankers.push(unit);
-        }
-    },
-    updateReapers: function(unit){
-        if(unit.unitType === 0){
-            this.reapers.push(unit);           
-        }
-    },
-    updateDoofers: function(unit){
-        if(unit.unitType === 2){
-            this.doofers.push(unit);           
+    updateUnits:function(unit){
+        switch(unit.unitType){
+            case 4:{ this.wrecks.push(unit);break;}
+            case 1:{ this.destroyers.push(unit); break;}
+            case 3:{ this.tankers.push(unit);break;}
+            case 0:{ this.reapers.push(unit);break;}
+            case 2:{ this.doofers.push(unit);break;}
+            case 5:{ this.tarPools.push(unit);break;}
+            case 6:{ this.oilPools.push(unit);break;}
         }
     },
     updateCollections:function(){
@@ -207,19 +272,15 @@ var game = {
         this.tankers = [];
         this.destroyers = [];
         this.doofers = [];
+        this.tarPools = [];
+        this.oilPools = [];
+        this.units = [];
     }    
 };
 
 game.playerDestroyer = getPlayer();
-game.playerReaper = getPlayer(true);
+game.playerReaper = getPlayer();
 game.playerDoofer = getPlayer();
-
-for(let angle=0;angle<360;angle+=45){
-    let x = 6000 * Math.cos(angle * (Math.PI / 180))  
-    let y = 6000 * Math.sin(angle * (Math.PI / 180))
-    game.maxPoints++;
-    game.arenaPoints.push({x:Math.floor(x),y:Math.floor(y)});
-}
 
 // game loop
 while (true) { 
